@@ -3,11 +3,10 @@ class Terminal {
         if (opts.role === "client") {
             if (!opts.parentId) throw "Missing options";
 
-            this.xTerm = require("xterm").Terminal;
-            const {AttachAddon} = require("xterm-addon-attach");
-            const {FitAddon} = require("xterm-addon-fit");
-            const {LigaturesAddon} = require("xterm-addon-ligatures");
-            const {WebglAddon} = require("xterm-addon-webgl");
+            this.xTerm = require("@xterm/xterm").Terminal;
+            const {AttachAddon} = require("@xterm/addon-attach");
+            const {FitAddon} = require("@xterm/addon-fit");
+            const {WebglAddon} = require("@xterm/addon-webgl");
             this.Ipc = require("electron").ipcRenderer;
 
             this.port = opts.port || 3000;
@@ -98,6 +97,7 @@ class Terminal {
             let themeColor = `rgb(${window.theme.r}, ${window.theme.g}, ${window.theme.b})`;
 
             this.term = new this.xTerm({
+                allowProposedApi: true, // required by the ligatures addon (xterm proposed API)
                 cols: 80,
                 rows: 24,
                 cursorBlink: window.theme.terminal.cursorBlink || true,
@@ -138,9 +138,30 @@ class Terminal {
             let fitAddon = new FitAddon();
             this.term.loadAddon(fitAddon);
             this.term.open(document.getElementById(opts.parentId));
-            this.term.loadAddon(new WebglAddon());
-            let ligaturesAddon = new LigaturesAddon();
-            this.term.loadAddon(ligaturesAddon);
+            // WebGL renderer (xterm v6): guard against unavailable WebGL and context loss,
+            // falling back to the default DOM renderer instead of breaking the terminal.
+            try {
+                let webglAddon = new WebglAddon();
+                webglAddon.onContextLoss(() => webglAddon.dispose());
+                this.term.loadAddon(webglAddon);
+            } catch (e) {
+                console.warn("WebGL addon unavailable, using default renderer:", e);
+            }
+            // @xterm/addon-ligatures ships ESM-only (and a broken CJS "main"), so it can't be
+            // require()'d under nodeIntegration. The renderer's dynamic import() goes through
+            // Chromium's loader, which can't resolve bare npm specifiers — so resolve the file
+            // to an absolute file:// URL with Node first, then import that (the .mjs is fully
+            // bundled, so nothing else needs resolving). Ligatures are cosmetic: never fatal.
+            try {
+                const ligaturesUrl = require("url").pathToFileURL(
+                    require.resolve("@xterm/addon-ligatures/lib/addon-ligatures.mjs")
+                ).href;
+                import(ligaturesUrl)
+                    .then(mod => this.term.loadAddon(new mod.LigaturesAddon()))
+                    .catch(e => console.warn("Ligatures addon failed to load:", e.message));
+            } catch (e) {
+                console.warn("Ligatures addon could not be resolved:", e.message);
+            }
             this.term.attachCustomKeyEventHandler(e => {
                 window.keyboard.keydownHandler(e);
                 return true;
@@ -293,7 +314,7 @@ class Terminal {
                     this.clipboard.didCopy = true;
                 },
                 paste: () => {
-                    this.write(remote.clipboard.readText());
+                    this.write(require("@electron/remote").clipboard.readText());
                     this.clipboard.didCopy = false;
                 },
                 didCopy: false

@@ -38,6 +38,10 @@ const path = require("path");
 const fs = require("fs");
 const electron = require("electron");
 const remote = require("@electron/remote");
+// Compatibility shim: `electron.remote` was removed from Electron core (v14+) and
+// replaced by the @electron/remote module. Re-attach it so the many existing
+// `electron.remote.*` call sites (and eval'd action strings) keep working.
+electron.remote = remote;
 const ipc = electron.ipcRenderer;
 
 const settingsDir = remote.app.getPath("userData");
@@ -59,7 +63,7 @@ if (remote.process.argv.includes("--nointro")) {
 } else {
     window.settings.nointroOverride = false;
 }
-if (electron.remote.process.argv.includes("--nocursor")) {
+if (remote.process.argv.includes("--nocursor")) {
     window.settings.nocursorOverride = true;
 } else {
     window.settings.nocursorOverride = false;

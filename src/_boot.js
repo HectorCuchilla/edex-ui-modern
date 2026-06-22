@@ -154,7 +154,15 @@ fs.readdirSync(innerFontsDir).forEach(e => {
 
 // Version history logging
 const versionHistoryPath = path.join(electron.app.getPath("userData"), "versions_log.json");
-var versionHistory = fs.existsSync(versionHistoryPath) ? require(versionHistoryPath) : {};
+var versionHistory = {};
+if (fs.existsSync(versionHistoryPath)) {
+    try {
+        versionHistory = JSON.parse(fs.readFileSync(versionHistoryPath, "utf-8"));
+    } catch (e) {
+        // Corrupted/partial version log (e.g. from an interrupted write) — start fresh rather than crash boot.
+        signale.warn(`Ignoring unreadable versions_log.json: ${e.message}`);
+    }
+}
 var version = app.getVersion();
 if (typeof versionHistory[version] === "undefined") {
 	versionHistory[version] = {
@@ -192,7 +200,6 @@ function createWindow(settings) {
         backgroundColor: '#000000',
         webPreferences: {
             devTools: true,
-	    enableRemoteModule: true,
             contextIsolation: false,
             backgroundThrottling: false,
             webSecurity: true,
@@ -202,6 +209,10 @@ function createWindow(settings) {
             experimentalFeatures: settings.experimentalFeatures || false
         }
     });
+
+    // @electron/remote v2: remote access must be enabled per-WebContents
+    // (replaces the removed webPreferences.enableRemoteModule option).
+    require('@electron/remote/main').enable(win.webContents);
 
     win.loadURL(url.format({
         pathname: path.join(__dirname, 'ui.html'),

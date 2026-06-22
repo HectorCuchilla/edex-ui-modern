@@ -1,0 +1,7 @@
+# Keep patch-package patches as LF so they apply cleanly on every platform
+# (CRLF conversion can break patch application).
+*.patch text eol=lf
+
+# Shell scripts and bin/ launchers must stay LF to run on macOS/Linux.
+bin/* text eol=lf
+*.sh text eol=lf
