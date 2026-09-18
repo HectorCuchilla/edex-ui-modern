@@ -68,3 +68,33 @@ section > h3.title:first-child::after {
     bottom: -0.555vh;
     height: 0.46vh;
 }
+
+/* augmented-ui 1.x draws the "exe" border as a full-size ::after clipped by a
+   self-intersecting polygon that relies on the nonzero winding rule to punch the
+   inner hole. On some GPU rasterization paths (seen on Intel UHD / Chromium 152)
+   the hole is not honored and the border color tints the whole element at
+   --aug-border-opacity. Re-declare the same path with an explicit evenodd rule. */
+[augmented-ui~="border-el"],
+[augmented-ui~="exe"]::after {
+    clip-path: polygon(evenodd,
+        var(--aug-_TlPathInset1, var(--aug-_W) var(--aug-_W))
+        var(--aug-_TPathInset1, ),
+        var(--aug-_TrPathInset1, var(--aug-_100W) var(--aug-_W))
+        var(--aug-_RPathInset1, ),
+        var(--aug-_BrPathInset1, var(--aug-_100W) var(--aug-_100W))
+        var(--aug-_BPathInset1, ),
+        var(--aug-_BlPathInset1, var(--aug-_W) var(--aug-_100W))
+        var(--aug-_LPathInset1, ),
+        var(--aug-_TlInset1JoinBX, var(--aug-_W)) var(--aug-_TlInset1JoinBY, var(--aug-_W)),
+        0px var(--aug-_TlInset1JoinBY, var(--aug-_W)),
+        0px 100%, 100% 100%, 100% 0px, 0px 0px,
+        0px var(--aug-_TlInset1JoinBY, var(--aug-_W)),
+        var(--aug-_TlInset1JoinBX, var(--aug-_W)) var(--aug-_TlInset1JoinBY, var(--aug-_W))
+    );
+}
+/* Toggled once by initUI() after #main_shell reaches its final size: Chromium keeps a
+   stale clip-path mask for the ::after created during the 0-size boot animation, which
+   tints the whole shell. Changing clip-path and restoring it rebuilds the mask. */
+[augmented-ui~="exe"].aug-clip-reset::after {
+    clip-path: none;
+}

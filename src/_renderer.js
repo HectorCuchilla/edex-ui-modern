@@ -510,6 +510,11 @@ async function initUI() {
 
     await _delay(200);
 
+    // Rebuild the augmented-ui border mask, see the .aug-clip-reset rule in main.css
+    document.getElementById("main_shell").classList.add("aug-clip-reset");
+    await _delay(50);
+    document.getElementById("main_shell").classList.remove("aug-clip-reset");
+
     window.updateCheck = new UpdateChecker();
 }
 

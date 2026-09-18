@@ -29,8 +29,8 @@
     "terminal": {
         "fontFamily": "Fira Code",
         "cursorStyle": "block",
-        "foreground": "#a3c2c2",
-        "background": "#0a3333",
+        "foreground": "#d0e8e8",
+        "background": "#052828",
         "cursor": "#5cffff",
         "cursorAccent": "#85ff5c",
         "selection": "#ffff5c"

@@ -269,9 +269,10 @@ class Terminal {
                 let {cols, rows} = fitAddon.proposeDimensions();
 
                 // Apply custom fixes based on screen ratio, see #302
+                // Only rows are adjusted: the fit addon (xterm v6) already reserves the
+                // 14px overlay scrollbar, so adding columns pushes text underneath it.
                 let w = screen.width;
                 let h = screen.height;
-                let x = 1;
                 let y = 0;
 
                 function gcd(a, b) {
@@ -279,14 +280,21 @@ class Terminal {
                 }
                 let d = gcd(w, h);
 
-                if (d === 100) { y = 1; x = 3;}
-                // if (d === 120) y = 1;
-                if (d === 256) x = 2;
+                if (d === 100) y = 1;
 
                 if (window.settings.termFontSize < 15) y = y - 1;
 
-                cols = cols+x;
                 rows = rows+y;
+
+                // Themes may offset .xterm-screen (e.g. cyborg: left: 0.4vh), which the fit
+                // addon doesn't see; drop columns until the last one clears the 14px scrollbar.
+                let screenEl = this.term.element.querySelector(".xterm-screen");
+                if (screenEl) {
+                    let offset = screenEl.getBoundingClientRect().left - this.term.element.getBoundingClientRect().left;
+                    let cellWidth = this.term._core._renderService.dimensions.css.cell.width;
+                    let usable = this.term.element.clientWidth - 14 - offset;
+                    cols = Math.min(cols, Math.max(2, Math.floor(usable / cellWidth)));
+                }
 
                 if (this.term.cols !== cols || this.term.rows !== rows) {
                     this.resize(cols, rows);

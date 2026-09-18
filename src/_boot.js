@@ -222,9 +222,12 @@ function createWindow(settings) {
 
     signale.complete("Frontend window created!");
     win.show();
-    if (!settings.allowWindowed) {
-        win.setResizable(false);
-    } else if (!require(lastWindowStateFile)["useFullscreen"]) {
+    // Note: do not call win.setResizable(false) on the fullscreen window. On X11
+    // (Chromium 152, xfwm4) it makes Chromium size the frameless window to the
+    // display plus its invisible resize borders (e.g. 1928x1084 on 1920x1080),
+    // pushing the side panels off screen. A frameless fullscreen window can't be
+    // resized by the user anyway.
+    if (settings.allowWindowed && !require(lastWindowStateFile)["useFullscreen"]) {
         win.setFullScreen(false);
     }
 
