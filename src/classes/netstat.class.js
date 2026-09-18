@@ -139,7 +139,7 @@ class Netstat {
                     this.runsBeforeGeoIPUpdate = this.runsBeforeGeoIPUpdate - 1;
                 }
 
-                let p = await this.ping(window.settings.pingAddr || "1.1.1.1", 80, net.ip4).catch(() => { offline = true });
+                let p = await this.pingAny(net.ip4).catch(() => { offline = true });
 
                 this.offline = offline;
                 if (offline) {
@@ -152,6 +152,21 @@ class Netstat {
                 }
             }
         });
+    }
+    pingAny(local) {
+        // Race the user-configured address against a few fallbacks, on ports that
+        // are commonly reachable, so a network blocking one host/port (e.g. 1.1.1.1:80)
+        // does not make the whole UI think we're offline.
+        let primary = window.settings.pingAddr || "1.1.1.1";
+        let targets = [
+            [primary, 80],
+            [primary, 443],
+            ["8.8.8.8", 53],
+            ["google.com", 80],
+            ["google.com", 443]
+        ].filter(([host, port], i, arr) => arr.findIndex(t => t[0] === host && t[1] === port) === i);
+
+        return Promise.any(targets.map(([host, port]) => this.ping(host, port, local)));
     }
     ping(target, port, local) {
         return new Promise((resolve, reject) => {
