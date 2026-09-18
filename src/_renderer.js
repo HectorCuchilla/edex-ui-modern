@@ -913,6 +913,8 @@ window.openShortcutsHelp = () => {
         "FS_LIST_VIEW": "Toggle between list and grid view in the file browser.",
         "FS_DOTFILES": "Toggle hidden files and directories in the file browser.",
         "KB_PASSMODE": "Toggle the on-screen keyboard's \"Password Mode\", which allows you to safely<br>type sensitive information even if your screen might be recorded (disable visual input feedback).",
+        "FONT_BIGGER": "Increase the terminal font size (saved to settings).",
+        "FONT_SMALLER": "Decrease the terminal font size (saved to settings).",
         "DEV_DEBUG": "Open Chromium Dev Tools, for debugging purposes.",
         "DEV_RELOAD": "Trigger front-end hot reload."
     };
@@ -991,6 +993,27 @@ window.openShortcutsHelp = () => {
     });
 };
 
+// Change the terminal font size on every open tab, refit them, and persist the value.
+window.setTermFontSize = size => {
+    size = Math.min(40, Math.max(8, Math.round(Number(size) || 15)));
+    if (size === window.settings.termFontSize) return;
+    window.settings.termFontSize = size;
+
+    Object.values(window.term).forEach(t => {
+        if (!t || typeof t !== "object" || !t.term) return;
+        t.term.options.fontSize = size;
+        t.fit();
+    });
+
+    // Write the whole settings object, not just the editor's fields, so nothing else is lost.
+    clearTimeout(window._fontSizeSaveTimer);
+    window._fontSizeSaveTimer = setTimeout(() => {
+        fs.writeFile(settingsFile, JSON.stringify(window.settings, "", 4), "utf-8", e => {
+            if (e) console.warn("Could not save termFontSize:", e);
+        });
+    }, 500);
+};
+
 window.useAppShortcut = action => {
     switch(action) {
         case "COPY":
@@ -1058,6 +1081,12 @@ window.useAppShortcut = action => {
             return true;
         case "KB_PASSMODE":
             window.keyboard.togglePasswordMode();
+            return true;
+        case "FONT_BIGGER":
+            window.setTermFontSize((window.settings.termFontSize || 15) + 1);
+            return true;
+        case "FONT_SMALLER":
+            window.setTermFontSize((window.settings.termFontSize || 15) - 1);
             return true;
         case "DEV_DEBUG":
             electron.remote.getCurrentWindow().webContents.toggleDevTools();
