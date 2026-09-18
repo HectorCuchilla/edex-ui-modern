@@ -1,7 +1,7 @@
 <p align="center">
   <img alt="eDEX-UI" src="media/logo.png">
   <br><br>
-  <strong>A community modernization fork of <a href="https://github.com/GitSquared/edex-ui">eDEX-UI</a></strong>
+  <strong>Dark eDEX — a community modernization fork of <a href="https://github.com/GitSquared/edex-ui">eDEX-UI</a></strong>
   <br>
   <em>The sci-fi terminal emulator & system monitor — revived for a modern stack.</em>
   <br><br>
@@ -16,7 +16,8 @@
 > This is a **community-maintained fork** of [GitSquared/eDEX-UI](https://github.com/GitSquared/edex-ui),
 > which was archived in October 2021. It is **not affiliated with or endorsed by** the original author.
 > All credit for eDEX-UI goes to **Gabriel "Squared" Saillard** and the original contributors.
-> "eDEX-UI" is the upstream name, used here for attribution only; a distinct fork name is still to be chosen.
+> "eDEX-UI" is the upstream name, used here for attribution only. This fork ships as **Dark eDEX**
+> (the config directory stays at `eDEX-UI` so existing settings, themes and layouts keep working).
 
 eDEX-UI is a fullscreen, cross-platform terminal emulator and system monitor that looks and feels like
 a sci-fi computer interface, heavily inspired by the **TRON Legacy** movie effects. It wraps a real
@@ -167,6 +168,9 @@ Two new keys in `settings.json` (also editable from the in-app settings editor, 
 |-----|---------|--------|
 | `uiFps` | `15` | Maximum frames per second for the globe and charts. `10` saves a few more GPU % at the cost of a slightly choppier globe. |
 | `pollRate` | `1` | Multiplier applied to every system-stats polling interval (`2` = everything polls half as often). |
+
+The terminal font size can also be changed live with `Ctrl+=` / `Ctrl+-` (or `Ctrl` + mouse wheel over
+the terminal); the value is saved to `termFontSize`.
 
 ### Things deliberately left alone
 
