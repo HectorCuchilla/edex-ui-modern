@@ -41824,10 +41824,14 @@ var createParticles = function(){
 
     var lng_values = geometry.attributes.lng.array;
 
-    var baseColorSet = pusherColor(this.baseColor).hueSet();
+    // Tile palette: keep the base colour at full saturation and only vary brightness, skewed
+    // towards bright. Upstream used hueSet() (saturation and value each in {100, 65, 30}%)
+    // plus up to 33% extra shade, which left most tiles dark and greyish and made the globe
+    // hard to read on mid-dark panel backgrounds.
+    var baseColor = pusherColor(this.baseColor);
     var myColors = [];
-    for(var i = 0; i< baseColorSet.length; i++){
-        myColors.push(baseColorSet[i].shade(Math.random()/3.0));
+    for(var i = 0; i < 9; i++){
+        myColors.push(baseColor.shade(Math.pow(Math.random(), 2) * 0.6));
     }
 
     // break geometry into
