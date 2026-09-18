@@ -329,7 +329,11 @@ class Terminal {
                     this.clipboard.didCopy = true;
                 },
                 paste: () => {
-                    this.write(require("@electron/remote").clipboard.readText());
+                    // Through @electron/remote v2 this call resolves asynchronously; writing the
+                    // raw return value would paste "[object Promise]".
+                    Promise.resolve(require("@electron/remote").clipboard.readText()).then(text => {
+                        if (text) this.write(text);
+                    });
                     this.clipboard.didCopy = false;
                 },
                 didCopy: false
