@@ -5,7 +5,7 @@
   <br>
   <em>The sci-fi terminal emulator & system monitor — revived for a modern stack.</em>
   <br><br>
-  <img alt="Electron 33" src="https://img.shields.io/badge/Electron-33-47848F?logo=electron&logoColor=white">
+  <img alt="Electron 44" src="https://img.shields.io/badge/Electron-44-47848F?logo=electron&logoColor=white">
   <img alt="License GPL-3.0" src="https://img.shields.io/badge/License-GPL--3.0-blue">
   <img alt="Platforms" src="https://img.shields.io/badge/platforms-Windows%20%C2%B7%20macOS%20%C2%B7%20Linux-lightgrey">
 </p>
@@ -39,7 +39,7 @@ systems again.
 
 | Area | Upstream (2.2.8) | This fork |
 |------|------------------|-----------|
-| Electron | 12 | **33** |
+| Electron | 12 | **44** |
 | `node-pty` (terminal backend) | 0.10 | **1.1** |
 | Terminal UI | `xterm` 4 | **`@xterm/*` v6** (scoped packages) |
 | Remote module | `@electron/remote` 1 | **2** (with the v2 `enable()` API) |
@@ -49,6 +49,9 @@ systems again.
 Plus runtime fixes required by the above: an `electron.remote` compatibility shim, ESM-aware loading of
 the ligatures addon, a more tolerant RAM-watcher, and resilient config-file reads. See
 [Technical notes](#technical-notes) for the interesting details.
+
+On top of the platform work, this fork also cuts eDEX's idle resource usage substantially without
+changing how it looks — see [Resource usage optimizations](#resource-usage-optimizations).
 
 ## Quick start
 
@@ -106,6 +109,71 @@ A few non-obvious things this fork had to solve, in case they help others revivi
 - **Ligatures addon (ESM).** `@xterm/addon-ligatures` ships ESM-only, so it's loaded via a dynamic
   `import()` of an absolute `file://` URL (resolved with Node) and enabled with the xterm
   `allowProposedApi` option.
+
+## Resource usage optimizations
+
+eDEX is a dashboard that never stops moving, and upstream paid for that with a lot of idle CPU. Profiled
+on a low-end laptop (4-core Celeron J4125, Intel UHD 600 iGPU, X11) the app burned **~95% of a core while
+idle** and held **~1.3 GB** across 11 Electron processes. The following changes bring that down to
+**~54% of a core and ~1.1 GB across 9 processes**, with the UI looking and behaving exactly as before.
+
+| Process | Before | After |
+|---------|-------:|------:|
+| GPU process | 45.6% | 25.0% |
+| Renderer (UI) | 31.7% | 19.6% |
+| `systeminformation` backend | 13.3% (3 workers) | 7.0% (1 worker) |
+| Main | 3.9% | 2.2% |
+| **Total** | **~95%** | **~54%** |
+
+*(10-second `pidstat` averages, same session, dashboard idle.)*
+
+### What was changed
+
+- **One shared animation clock (`src/classes/uiTicker.class.js`).** On an integrated GPU every
+  composited frame costs about the same whether it repaints an 8-pixel canvas or the whole window,
+  so what matters is *how many frames per second the page produces*, not how much each one draws.
+  Upstream let the network globe and the four smoothie charts (CPU ×2, network ×2) each run their own
+  `requestAnimationFrame` loop at different rates, spreading repaints over different vsyncs. They now
+  all register with a single capped ticker: the globe ticks at the full rate and the charts repaint at
+  half of it, inside the same frame. The ticker pauses while the window is hidden.
+- **Saner polling.** Every module's `setInterval` goes through `window.pollInterval()` and the
+  defaults were relaxed where nothing visible changes (CPU load 0.5 → 1 s, CPU temperature 2 → 5 s,
+  CPU speed 1 → 2 s, RAM 1.5 → 2 s, network status 2 → 3 s, top processes 2 → 3 s, battery 3 → 10 s,
+  globe location 1 → 2 s).
+- **A single `systeminformation` worker (`src/_multithread.js`, `src/_multithread-worker.js`).**
+  Upstream forked a `cluster` of *N − 1* full Electron processes (~130 MB RSS each) to run
+  `systeminformation` queries off the main process. Those queries are I/O bound (they shell out to
+  `ps`, `ss`, read `/proc`…), so one Electron `utilityProcess` handles them concurrently with the same
+  IPC interface. It restarts itself if it dies and answers in-flight requests with `null` so callers
+  never hang.
+- **Result cache for expensive queries.** `processes` (a full `ps` run) was requested independently by
+  the top-processes list and by the CPU "tasks" counter; `networkConnections` (`ss`) by the globe.
+  The backend now keeps a short-lived cache (0.5–2.5 s depending on the query) and dedupes calls that
+  are still in flight, so the OS is asked once per poll cycle.
+- **No `sh + ps` per terminal tick (Linux).** To label the shell tab with the running program, the
+  main process spawned `ps -g … | tail -1` every second that saw terminal output. It now reads the
+  tty's foreground process group from `/proc/<pid>/stat` and its name from `/proc/<tpgid>/comm`,
+  falling back to `ps` if procfs is unavailable. As a side effect the tab shows the actual foreground
+  job instead of the newest process in the session, so it no longer flickers while a program spawns
+  helpers.
+- **pdf.js on demand.** The ~400 KB PDF viewer library is loaded the first time a PDF is opened from
+  the file browser instead of at boot.
+
+### Tuning knobs
+
+Two new keys in `settings.json` (also editable from the in-app settings editor, `Ctrl+Shift+S`):
+
+| Key | Default | Effect |
+|-----|---------|--------|
+| `uiFps` | `15` | Maximum frames per second for the globe and charts. `10` saves a few more GPU % at the cost of a slightly choppier globe. |
+| `pollRate` | `1` | Multiplier applied to every system-stats polling interval (`2` = everything polls half as often). |
+
+### Things deliberately left alone
+
+- The terminal itself: xterm's WebGL renderer is already the cheapest option.
+- Cursor blink, GeoLite2-City in memory (~66 MB, needed for the globe's connection pins) and the
+  chart/globe visuals — all would change the look and feel.
+- Chromium GPU flags: with GPU rasterization already forced they made no measurable difference.
 
 ## Status
 
