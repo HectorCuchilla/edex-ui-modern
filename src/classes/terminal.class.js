@@ -163,9 +163,16 @@ class Terminal {
                 console.warn("Ligatures addon could not be resolved:", e.message);
             }
             this.term.attachCustomKeyEventHandler(e => {
+                if (window.handleFontZoomKey && window.handleFontZoomKey(e)) return false;
                 window.keyboard.keydownHandler(e);
                 return true;
             });
+            // Ctrl + mouse wheel over the terminal also zooms the font.
+            this.term.element.addEventListener("wheel", e => {
+                if (!e.ctrlKey || !window.useAppShortcut) return;
+                e.preventDefault();
+                window.useAppShortcut(e.deltaY < 0 ? "FONT_BIGGER" : "FONT_SMALLER");
+            }, {passive: false});
             // Prevent soft-keyboard on touch devices #733
             document.querySelectorAll('.xterm-helper-textarea').forEach(textarea => textarea.setAttribute('readonly', 'readonly'))
             this.term.focus();

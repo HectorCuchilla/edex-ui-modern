@@ -254,7 +254,7 @@ function displayLine() {
 
     switch(true) {
         case i === 2:
-            bootScreen.innerHTML += `eDEX-UI Kernel version ${electron.remote.app.getVersion()} boot at ${Date().toString()}; root:xnu-1699.22.73~1/RELEASE_X86_64`;
+            bootScreen.innerHTML += `Dark eDEX Kernel version ${electron.remote.app.getVersion()} boot at ${Date().toString()}; root:xnu-1699.22.73~1/RELEASE_X86_64`;
         case i === 4:
             setTimeout(displayLine, 500);
             break;
@@ -299,7 +299,7 @@ async function displayTitleScreen() {
 
     document.body.setAttribute("class", "");
     bootScreen.setAttribute("class", "center");
-    bootScreen.innerHTML = "<h1>eDEX-UI</h1>";
+    bootScreen.innerHTML = "<h1>Dark eDEX</h1>";
     let title = document.querySelector("section > h1");
 
     await _delay(200);
@@ -498,7 +498,7 @@ async function initUI() {
     window.onmouseup = e => {
         if (window.keyboard.linkedToTerm) window.term[window.currentTerm].term.focus();
     };
-    window.term[0].term.writeln("\033[1m"+`Welcome to eDEX-UI v${electron.remote.app.getVersion()} - Electron v${process.versions.electron}`+"\033[0m");
+    window.term[0].term.writeln("\033[1m"+`Welcome to Dark eDEX v${electron.remote.app.getVersion()} - Electron v${process.versions.electron}`+"\033[0m");
 
     await _delay(100);
 
@@ -1014,6 +1014,23 @@ window.setTermFontSize = size => {
     }, 500);
 };
 
+// In-page fallback for the font size shortcuts, matched on the produced character so it works
+// with any keyboard layout and through remote-desktop input where OS-level global shortcuts
+// may not fire. Returns true when the event was consumed.
+window.handleFontZoomKey = e => {
+    // The same event reaches both xterm's custom handler and the document listener.
+    if (e.defaultPrevented || e.type !== "keydown" || !e.ctrlKey || e.altKey || e.metaKey) return false;
+    if (e.key === "=" || e.key === "+") {
+        window.useAppShortcut("FONT_BIGGER");
+    } else if (e.key === "-" || e.key === "_") {
+        window.useAppShortcut("FONT_SMALLER");
+    } else {
+        return false;
+    }
+    e.preventDefault();
+    return true;
+};
+
 window.useAppShortcut = action => {
     switch(action) {
         case "COPY":
@@ -1143,6 +1160,7 @@ window.addEventListener("blur", () => {
 
 // Prevent showing menu, exiting fullscreen or app with keyboard shortcuts
 document.addEventListener("keydown", e => {
+    if (window.handleFontZoomKey(e)) return;
     if (e.key === "Alt") {
         e.preventDefault();
     }
