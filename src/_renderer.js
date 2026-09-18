@@ -207,6 +207,13 @@ function initSystemInformationProxy() {
 // Init audio
 window.audioManager = new AudioManager();
 
+// Shared animation clock for the globe and the charts (see classes/uiTicker.class.js).
+// uiFps caps how many frames per second the dashboard may produce; lower = less GPU load.
+window.uiTicker = new UITicker(window.settings.uiFps || 15);
+
+// Scale factor applied to every module's polling interval (1 = defaults, 2 = twice slower...).
+window.pollInterval = ms => Math.round(ms * (Number(window.settings.pollRate) > 0 ? Number(window.settings.pollRate) : 1));
+
 // See #223
 electron.remote.app.focus();
 
@@ -789,6 +796,16 @@ window.openSettings = async () => {
                         </select></td>
                     </tr>
                     <tr>
+                        <td>uiFps</td>
+                        <td>Max frames per second for the globe and charts (lower = less GPU load)</td>
+                        <td><input type="number" id="settingsEditor-uiFps" value="${window.settings.uiFps || 15}"></td>
+                    </tr>
+                    <tr>
+                        <td>pollRate</td>
+                        <td>Multiplier applied to system stats polling intervals (1 = default, 2 = twice slower)</td>
+                        <td><input type="number" step="0.5" id="settingsEditor-pollRate" value="${window.settings.pollRate || 1}"></td>
+                    </tr>
+                    <tr>
                         <td>experimentalGlobeFeatures</td>
                         <td>Toggle experimental features for the network globe</td>
                         <td><select id="settingsEditor-experimentalGlobeFeatures">
@@ -854,6 +871,8 @@ window.writeSettingsFile = () => {
         excludeThreadsFromToplist: (document.getElementById("settingsEditor-excludeThreadsFromToplist").value === "true"),
         hideDotfiles: (document.getElementById("settingsEditor-hideDotfiles").value === "true"),
         fsListView: (document.getElementById("settingsEditor-fsListView").value === "true"),
+        uiFps: Number(document.getElementById("settingsEditor-uiFps").value) || 15,
+        pollRate: Number(document.getElementById("settingsEditor-pollRate").value) || 1,
         experimentalGlobeFeatures: (document.getElementById("settingsEditor-experimentalGlobeFeatures").value === "true"),
         experimentalFeatures: (document.getElementById("settingsEditor-experimentalFeatures").value === "true")
     };

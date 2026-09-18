@@ -1,89 +1,69 @@
-const cluster = require("cluster");
+// Backend for the renderer's `window.si` proxy (see initSystemInformationProxy in _renderer.js).
+//
+// systeminformation calls are I/O bound (they shell out to ps, sensors, /proc, ...), so a single
+// utility process is enough to keep them off the main process: every request is dispatched
+// concurrently inside it. This replaces the previous cluster of N full Electron workers, which
+// cost ~130MB RSS each for no extra throughput.
+const {utilityProcess, ipcMain: ipc} = require("electron");
+const signale = require("signale");
+const si = require("systeminformation");
 
-if (cluster.isMaster) {
-    const electron = require("electron");
-    const ipc = electron.ipcMain;
-    const signale = require("signale");
-    // Also, leave a core available for the renderer process
-    const osCPUs = require("os").cpus().length - 1;
-    // See #904
-    const numCPUs = (osCPUs > 7) ? 7 : osCPUs;
+const pending = new Map();
+let worker = null;
 
-    const si = require("systeminformation");
-
-    cluster.setupMaster({
-        exec: require("path").join(__dirname, "_multithread.js")
+function spawnWorker() {
+    worker = utilityProcess.fork(require("path").join(__dirname, "_multithread-worker.js"), [], {
+        serviceName: "eDEX-UI systeminformation"
     });
 
-    let workers = [];
-    cluster.on("fork", worker => {
-        workers.push(worker.id);
-    });
-
-    for (let i = 0; i < numCPUs; i++) {
-        cluster.fork();
-    }
-
-    signale.success("Multithreaded controller ready");
-
-    var lastID = 0;
-
-    function dispatch(type, id, arg) {
-        let selectedID = lastID+1;
-        if (selectedID > numCPUs-1) selectedID = 0;
-
-        cluster.workers[workers[selectedID]].send(JSON.stringify({
-            id,
-            type,
-            arg
-        }));
-
-        lastID = selectedID;
-    }
-
-    var queue = {};
-    ipc.on("systeminformation-call", (e, type, id, ...args) => {
-        if (!si[type]) {
-            signale.warn("Illegal request for systeminformation");
-            return;
-        }
-
-        if (args.length > 1 || workers.length <= 0) {
-            si[type](...args).then(res => {
-                if (e.sender) {
-                    e.sender.send("systeminformation-reply-"+id, res);
-                }
-            });
-        } else {
-            queue[id] = e.sender;
-            dispatch(type, id, args[0]);
-        }
-    });
-
-    cluster.on("message", (worker, msg) => {
-        msg = JSON.parse(msg);
+    worker.on("message", msg => {
+        let sender = pending.get(msg.id);
+        pending.delete(msg.id);
+        if (!sender) return;
         try {
-            if (!queue[msg.id].isDestroyed()) {
-                queue[msg.id].send("systeminformation-reply-"+msg.id, msg.res);
-                delete queue[msg.id];
-            }
+            if (!sender.isDestroyed()) sender.send("systeminformation-reply-"+msg.id, msg.res);
         } catch(e) {
             // Window has been closed, ignore.
         }
     });
-} else if (cluster.isWorker) {
-    const signale = require("signale");
-    const si = require("systeminformation");
 
-    signale.info("Multithread worker started at "+process.pid);
-
-    process.on("message", msg => {
-        msg = JSON.parse(msg);
-        si[msg.type](msg.arg).then(res => {
-            process.send(JSON.stringify({
-                id: msg.id,
-                res
-            }));
-        });
+    worker.on("exit", code => {
+        signale.warn(`systeminformation worker exited (code ${code}), restarting`);
+        // Requests in flight are lost; answer them from the main process so callers don't hang.
+        for (const [id, sender] of pending) {
+            pending.delete(id);
+            try {
+                if (!sender.isDestroyed()) sender.send("systeminformation-reply-"+id, null);
+            } catch(e) {
+                // ignore
+            }
+        }
+        worker = null;
+        setTimeout(spawnWorker, 1000);
     });
 }
+
+spawnWorker();
+signale.success("systeminformation worker ready");
+
+ipc.on("systeminformation-call", (e, type, id, ...args) => {
+    if (!si[type]) {
+        signale.warn("Illegal request for systeminformation");
+        return;
+    }
+
+    // Multi-argument calls and callback-style results stay on the main process, as before.
+    if (args.length > 1 || worker === null) {
+        si[type](...args).then(res => {
+            try {
+                if (!e.sender.isDestroyed()) e.sender.send("systeminformation-reply-"+id, res);
+            } catch(err) {
+                // Window has been closed, ignore.
+            }
+        });
+        return;
+    }
+
+    pending.set(id, e.sender);
+    worker.postMessage({id, type, arg: args[0]});
+});

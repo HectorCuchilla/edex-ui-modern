@@ -92,6 +92,8 @@ if (!fs.existsSync(settingsFile)) {
         excludeThreadsFromToplist: true,
         hideDotfiles: false,
         fsListView: false,
+        uiFps: 15,
+        pollRate: 1,
         experimentalGlobeFeatures: false,
         experimentalFeatures: false
     }, "", 4));
@@ -281,8 +283,8 @@ app.on('ready', async () => {
         signale.watch("Waiting for frontend connection...");
     };
 
-    // Support for multithreaded systeminformation calls
-    signale.pending("Starting multithreaded calls controller...");
+    // Off-main-process systeminformation calls (single utility process)
+    signale.pending("Starting systeminformation worker...");
     require("./_multithread.js");
 
     createWindow(settings);

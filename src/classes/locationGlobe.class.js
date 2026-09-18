@@ -49,21 +49,12 @@ class LocationGlobe {
             placeholder.remove();
             container.append(this.globe.domElement);
 
-            // Init animations
+            // Init animations: the globe is ticked by the shared UI clock so its repaints land in
+            // the same compositor frame as the charts (see classes/uiTicker.class.js).
             this._animate = () => {
-                if (window.mods.globe.globe) {
-                    window.mods.globe.globe.tick();
-                }
-                if (window.mods.globe._animate) {
-                    setTimeout(() => {
-                        try {
-                            requestAnimationFrame(window.mods.globe._animate);
-                        } catch(e) {
-                            // We probably got caught in a theme change. Print it out but everything should keep running fine.
-                            console.warn(e);
-                        }
-                    }, 1000 / 30);
-                }
+                window.uiTicker.add("globe", () => {
+                    if (this.globe) this.globe.tick();
+                });
             };
             this.globe.init(window.theme.colors.light_black, () => {
                 this._animate();
@@ -124,12 +115,12 @@ class LocationGlobe {
             this.updateLoc();
             this.locUpdater = setInterval(() => {
                 this.updateLoc();
-            }, 1000);
+            }, window.pollInterval(2000));
 
             this.updateConns();
             this.connsUpdater = setInterval(() => {
                 this.updateConns();
-            }, 3000);
+            }, window.pollInterval(3000));
         }, 4000);
     }
 

@@ -24,9 +24,8 @@ class Conninfo {
 
         // Set chart options
         let chartOptions = [{
-            limitFPS: 40,
             responsive: true,
-            millisPerPixel: 70,
+            millisPerPixel: 140,
             interpolation: 'linear',
             grid:{
                 millisPerLine: 5000,
@@ -52,14 +51,20 @@ class Conninfo {
         this.charts[0].addTimeSeries(this.series[0], {lineWidth:1.7,strokeStyle:`rgb(${window.theme.r},${window.theme.g},${window.theme.b})`});
         this.charts[1].addTimeSeries(this.series[1], {lineWidth:1.7,strokeStyle:`rgb(${window.theme.r},${window.theme.g},${window.theme.b})`});
 
+        // Attach the canvases but repaint them from the shared UI clock instead of smoothie's
+        // own rAF loop (see classes/uiTicker.class.js).
         this.charts[0].streamTo(document.getElementById("mod_conninfo_canvas_top"), 1000);
         this.charts[1].streamTo(document.getElementById("mod_conninfo_canvas_bottom"), 1000);
+        this.charts.forEach(chart => chart.stop());
+        window.uiTicker.add("conninfo-charts", () => {
+            this.charts.forEach(chart => chart.render());
+        }, 2);
 
         // Init updater
         this.updateInfo();
         this.infoUpdater = setInterval(() => {
             this.updateInfo();
-        }, 1000);
+        }, window.pollInterval(1000));
     }
     updateInfo() {
         let time = new Date().getTime();

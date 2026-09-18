@@ -17,7 +17,7 @@ class Toplist {
         this.updateList();
         this.listUpdater = setInterval(() => {
             this.updateList();
-        }, 2000);
+        }, window.pollInterval(3000));
     }
     updateList() {
         if (this.currentlyUpdating) return;
@@ -237,7 +237,7 @@ class Toplist {
         updateProcessList();
         window.keyboard.attach();
         window.term[window.currentTerm].term.focus();
-        var updateInterval = setInterval(updateProcessList, 1000);
+        var updateInterval = setInterval(updateProcessList, window.pollInterval(2000));
     }
 }
 

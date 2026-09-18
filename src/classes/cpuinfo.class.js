@@ -57,9 +57,8 @@ class Cpuinfo {
 
             for (var i = 0; i < 2; i++) {
                 this.charts.push(new SmoothieChart({
-                    limitFPS: 30,
                     responsive: true,
-                    millisPerPixel: 50,
+                    millisPerPixel: 100,
                     grid:{
                         fillStyle:'transparent',
                         strokeStyle:'transparent',
@@ -92,9 +91,15 @@ class Cpuinfo {
                 }
             }
 
+            // Attach the canvases but don't let smoothie run its own rAF loop: the charts are
+            // repainted from the shared UI clock, at half its rate.
             for (var i = 0; i < 2; i++) {
                 this.charts[i].streamTo(document.getElementById(`mod_cpuinfo_canvas_${i}`), 500);
+                this.charts[i].stop();
             }
+            window.uiTicker.add("cpuinfo-charts", () => {
+                this.charts.forEach(chart => chart.render());
+            }, 2);
 
             // Init updater
             this.updatingCPUload = false;
@@ -106,18 +111,18 @@ class Cpuinfo {
             this.updateCPUtasks();
             this.loadUpdater = setInterval(() => {
                 this.updateCPUload();
-            }, 500);
+            }, window.pollInterval(1000));
             if (process.platform !== "win32") {
                 this.tempUpdater = setInterval(() => {
                     this.updateCPUtemp();
-                }, 2000);
+                }, window.pollInterval(5000));
             }
             this.speedUpdater = setInterval(() => {
                 this.updateCPUspeed();
-            }, 1000);
+            }, window.pollInterval(2000));
             this.tasksUpdater = setInterval(() => {
                 this.updateCPUtasks();
-            }, 5000);
+            }, window.pollInterval(5000));
         });
     }
     updateCPUload() {
