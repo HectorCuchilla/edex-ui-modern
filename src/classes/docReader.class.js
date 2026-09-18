@@ -1,6 +1,37 @@
 class DocReader {
+    // pdf.js is ~400KB of script plus its own heap; load it the first time a PDF is opened
+    // instead of at boot (see ui.html).
+    static loadPdfjs() {
+        if (window.pdfjsLib) return Promise.resolve();
+        if (!DocReader._loading) {
+            DocReader._loading = new Promise((resolve, reject) => {
+                const script = document.createElement("script");
+                script.src = "node_modules/pdfjs-dist/build/pdf.js";
+                script.onload = () => {
+                    pdfjsLib.GlobalWorkerOptions.workerSrc = './node_modules/pdfjs-dist/build/pdf.worker.js';
+                    resolve();
+                };
+                script.onerror = () => {
+                    DocReader._loading = null;
+                    reject(new Error("Could not load pdf.js"));
+                };
+                document.head.appendChild(script);
+            });
+        }
+        return DocReader._loading;
+    }
+
     constructor(opts) {
-        pdfjsLib.GlobalWorkerOptions.workerSrc = './node_modules/pdfjs-dist/build/pdf.worker.js';
+        DocReader.loadPdfjs().then(() => this._init(opts)).catch(e => {
+            new Modal({
+                type: "error",
+                title: "Failed to load PDF viewer",
+                message: e.message
+            });
+        });
+    }
+
+    _init(opts) {
         const modalElementId = "modal_" + opts.modalId;
         const path = opts.path;
         const scale = 1;

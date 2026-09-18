@@ -374,16 +374,31 @@ class Terminal {
             this._getTtyProcess = tty => {
                 return new Promise((resolve, reject) => {
                     let pid = tty._pid;
+                    const viaPs = () => {
+                        require("child_process").exec(`ps -o comm --no-headers --sort=+pid -g ${pid} | tail -1`, (e, proc) => {
+                            if (e !== null) {
+                                reject(e);
+                            } else {
+                                resolve(proc.trim());
+                            }
+                        });
+                    };
                     switch(require("os").type()) {
                         case "Linux":
-                        case "Darwin":
-                            require("child_process").exec(`ps -o comm --no-headers --sort=+pid -g ${pid} | tail -1`, (e, proc) => {
-                                if (e !== null) {
-                                    reject(e);
-                                } else {
-                                    resolve(proc.trim());
-                                }
+                            // Read the tty's foreground process group straight from procfs instead of
+                            // spawning sh+ps on every tick that saw output.
+                            require("fs").readFile(`/proc/${pid}/stat`, "utf8", (e, stat) => {
+                                // Fields after "comm)": state ppid pgrp session tty_nr tpgid ...
+                                let tpgid = (e === null) ? Number(stat.slice(stat.lastIndexOf(")") + 2).split(" ")[5]) : NaN;
+                                if (!(tpgid > 0)) return viaPs();
+                                require("fs").readFile(`/proc/${tpgid}/comm`, "utf8", (e, comm) => {
+                                    if (e !== null) return viaPs();
+                                    resolve(comm.trim());
+                                });
                             });
+                            break;
+                        case "Darwin":
+                            viaPs();
                             break;
                         default:
                             reject("Unsupported OS");

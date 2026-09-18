@@ -11,32 +11,68 @@ const si = require("systeminformation");
 const pending = new Map();
 let worker = null;
 
+// Short-lived result cache for the expensive, argument-less queries that several modules poll
+// independently (e.g. toplist and cpuinfo both want `processes`, which shells out to ps and
+// parses every process). A call made while a fresh-enough result exists, or while the same
+// query is still in flight, reuses it instead of hitting the system again.
+const CACHE_TTL = {
+    processes: 2500,
+    networkConnections: 2500,
+    networkInterfaces: 2500,
+    cpuTemperature: 2000,
+    mem: 1000,
+    currentLoad: 500
+};
+const cache = new Map();
+
+function cached(type, run) {
+    const ttl = CACHE_TTL[type];
+    if (!ttl) return run();
+    const hit = cache.get(type);
+    const now = Date.now();
+    if (hit && now - hit.time < ttl) return hit.promise;
+    const entry = {time: now, promise: run()};
+    cache.set(type, entry);
+    entry.promise.catch(() => cache.delete(type));
+    return entry.promise;
+}
+
+function reply(sender, id, res) {
+    try {
+        if (!sender.isDestroyed()) sender.send("systeminformation-reply-"+id, res);
+    } catch(e) {
+        // Window has been closed, ignore.
+    }
+}
+
+// Ask the worker (or the main process while it is down) for one query, as a promise.
+function query(type, arg) {
+    if (worker === null) return si[type](arg);
+    return new Promise(resolve => {
+        const id = ++querySeq;
+        pending.set(id, resolve);
+        worker.postMessage({id, type, arg});
+    });
+}
+let querySeq = 0;
+
 function spawnWorker() {
     worker = utilityProcess.fork(require("path").join(__dirname, "_multithread-worker.js"), [], {
         serviceName: "eDEX-UI systeminformation"
     });
 
     worker.on("message", msg => {
-        let sender = pending.get(msg.id);
+        let resolve = pending.get(msg.id);
         pending.delete(msg.id);
-        if (!sender) return;
-        try {
-            if (!sender.isDestroyed()) sender.send("systeminformation-reply-"+msg.id, msg.res);
-        } catch(e) {
-            // Window has been closed, ignore.
-        }
+        if (resolve) resolve(msg.res);
     });
 
     worker.on("exit", code => {
         signale.warn(`systeminformation worker exited (code ${code}), restarting`);
-        // Requests in flight are lost; answer them from the main process so callers don't hang.
-        for (const [id, sender] of pending) {
+        // Requests in flight are lost; resolve them with null so callers don't hang.
+        for (const [id, resolve] of pending) {
             pending.delete(id);
-            try {
-                if (!sender.isDestroyed()) sender.send("systeminformation-reply-"+id, null);
-            } catch(e) {
-                // ignore
-            }
+            resolve(null);
         }
         worker = null;
         setTimeout(spawnWorker, 1000);
@@ -52,18 +88,14 @@ ipc.on("systeminformation-call", (e, type, id, ...args) => {
         return;
     }
 
-    // Multi-argument calls and callback-style results stay on the main process, as before.
-    if (args.length > 1 || worker === null) {
-        si[type](...args).then(res => {
-            try {
-                if (!e.sender.isDestroyed()) e.sender.send("systeminformation-reply-"+id, res);
-            } catch(err) {
-                // Window has been closed, ignore.
-            }
-        });
-        return;
+    let result;
+    if (args.length > 1) {
+        // Multi-argument calls stay on the main process, as before.
+        result = si[type](...args);
+    } else if (args.length === 0) {
+        result = cached(type, () => query(type, undefined));
+    } else {
+        result = query(type, args[0]);
     }
-
-    pending.set(id, e.sender);
-    worker.postMessage({id, type, arg: args[0]});
+    result.then(res => reply(e.sender, id, res)).catch(() => reply(e.sender, id, null));
 });
